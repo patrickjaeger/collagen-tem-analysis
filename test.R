@@ -51,6 +51,7 @@ delaunay <- delaunay %>%
   )
 
 
+# inter-fiber distances ----
 # calculate inter-fiber distance
 distances <- delaunay %>% 
   rename(cc_dist = dist_p) %>% 
@@ -72,3 +73,28 @@ ggplot(d2, aes(min_dist)) +
 
 
 # just declare min_dist < 0 as 0, i.e. touching
+
+
+# fibril distribution ----
+com
+d2$p1[!duplicated(d2$p1)]
+com[d2$p1[!duplicated(d2$p1)],]
+
+ggplot(com, aes(minferet)) +
+  geom_freqpoly() +
+  # geom_density() +
+  scale_x_continuous(breaks = seq(0, 180, 20),
+                     limits = c(0, 200))
+
+sizes <- com %>% 
+  mutate(diam = 
+           case_when(minferet < 40 ~ "small",
+                     between(minferet, 40, 120) ~ "medium",
+                     minferet > 120 ~ "large",
+                     T~"x")) %>% 
+  mutate(sample = "1")
+filter(sizes, diam == "x")
+
+# https://r-graph-gallery.com/48-grouped-barplot-with-ggplot2
+ggplot(sizes, aes(sample, minferet, fill = diam)) +
+  geom_bar(position = "fill", stat="identity")

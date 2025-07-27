@@ -1,3 +1,11 @@
+#' 1. fiber area vs. empty area
+#' 2. number of fibers per area
+#' 3. distribution of fiber diameters
+#'    - fraction of e.g. 0-30, 31-100, 100+; stacked bar plot
+#' 4. inter-fiber distance
+#' 5. 
+
+
 library(tidyverse)
 library(RANN)
 library(ggforce)
@@ -35,14 +43,11 @@ ggplot(delaunay, aes(dist_p)) +
   geom_freqpoly(bins = 200)
 
 
-# filter out the really long distances (on the edges)
-
-
 # transfer feret
 delaunay <- delaunay %>%
   mutate(
-    feret_p1 = com$feret[p1],
-    feret_p2 = com$feret[p2]
+    feret_p1 = com$minferet[p1],
+    feret_p2 = com$minferet[p2]
   )
 
 
@@ -51,13 +56,19 @@ distances <- delaunay %>%
   rename(cc_dist = dist_p) %>% 
   mutate(min_dist = cc_dist - feret_p1/2 - feret_p2/2)
 distances
-ggplot(distances, aes(min_dist)) +
-  geom_freqpoly(bins = 200)
-distances %>% arrange(x1)
 
+# filter out the really long distances (on the edges)
+d2 <- filter(distances, min_dist < quantile(distances$min_dist, 0.90))
+
+# plot
 ggplot(distances, aes(x1, -y1)) +
   geom_segment(aes(x = x1, y = -y1, xend = x2, yend = -y2), color = "blue") +
-  geom_circle(aes(x0 = x1, y0 = -y1, r = feret_p1/2*0.9), color = "darkgray") +
+  geom_segment(data = d2, aes(x = x1, y = -y1, xend = x2, yend = -y2), color = "red") +
+  geom_circle(aes(x0 = x1, y0 = -y1, r = feret_p1/2), color = "darkgray") +
   geom_point() 
+
+ggplot(d2, aes(min_dist)) +
+  geom_freqpoly()
+
 
 # just declare min_dist < 0 as 0, i.e. touching

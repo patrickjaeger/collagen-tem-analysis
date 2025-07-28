@@ -5,6 +5,7 @@
 // open file
 open(file);
 run("8-bit");
+setMinAndMax(150, 220);
 img_name_w_ext = getTitle();
 img_name = File.nameWithoutExtension;
 run("Duplicate...", "title=og");

@@ -71,6 +71,9 @@ ggplot(distances, aes(x1, -y1)) +
 ggplot(d2, aes(min_dist)) +
   geom_freqpoly()
 
+# filter edges by using quantile on x/y and remove the outer layer; should 
+# be better solution for images with empty patches inside
+
 
 # just declare min_dist < 0 as 0, i.e. touching
 

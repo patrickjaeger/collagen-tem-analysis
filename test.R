@@ -10,45 +10,102 @@ library(tidyverse)
 library(RANN)
 library(ggforce)
 
-com <- read_csv("COM-2.csv", show_col_types = FALSE) %>%
-  select(-1) %>%
-  rename_with(tolower)
+path <- "data/t1"
+tags <- c("x", "y")
+sep <- "_"
 
-delaunay <- read_csv("delaunay-2.csv", show_col_types = FALSE) %>%
-  select(-1) %>%
-  rename_with(tolower)
+areas <- tibble(
+  file = list.files(path, pattern = "areas.csv", full.names = TRUE),
+  area = map(file, ~data.table::fread(.) %>% 
+               select(-1) %>% 
+               rename_with(tolower))
+) %>% 
+  mutate(file = basename(file)) %>% 
+  separate(file, tags, sep = sep)
 
-# match points in com to delauny
-ref   <- as.matrix(select(com, xm, ym))
-q_p1  <- as.matrix(select(delaunay, x1, y1))
-q_p2  <- as.matrix(select(delaunay, x2, y2))
+coms <- tibble(
+  file = list.files(path, pattern = "COM.csv", full.names = TRUE),
+  com = map(file, ~data.table::fread(.) %>% 
+               select(-1) %>% 
+               rename_with(tolower))
+) %>% 
+  mutate(file = basename(file)) %>% 
+  separate(file, tags, sep = sep)
 
-idx_p1 <- nn2(ref, q_p1, k = 1)$nn.idx[, 1]
-idx_p2 <- nn2(ref, q_p2, k = 1)$nn.idx[, 1]
+dely <- tibble(
+  file = list.files(path, pattern = "delaunay.csv", full.names = TRUE),
+  dely = map(file, ~data.table::fread(.) %>% 
+               select(-1) %>% 
+               rename_with(tolower))
+) %>% 
+  mutate(file = basename(file)) %>% 
+  separate(file, tags, sep = sep)
 
-delaunay <- delaunay %>%
-  mutate(p1 = idx_p1,
-         p2 = idx_p2)
+dat <- full_join(areas, coms) %>% full_join(., dely)
 
-com
-delaunay
 
-# add euclidean distance between p1 and p2
-delaunay <- delaunay %>%
+# calculate distances ----
+add_pidx <- function(dely_tbl, com_tbl, max_dist = Inf) {
+  # be flexible about input types (data.table, data.frame, tibble)
+  dely_tbl <- as_tibble(dely_tbl)
+  com_tbl  <- as_tibble(com_tbl)
+  
+  # ensure numeric columns
+  dely_tbl <- dely_tbl %>% mutate(across(c(x1, y1, x2, y2), as.numeric))
+  com_tbl  <- com_tbl  %>% mutate(across(c(xm, ym), as.numeric))
+  
+  if (nrow(dely_tbl) == 0L || nrow(com_tbl) == 0L) {
+    return(dely_tbl %>% mutate(p1 = NA_integer_, p2 = NA_integer_))
+  }
+  
+  ref <- as.matrix(select(com_tbl, xm, ym))
+  q1  <- as.matrix(select(dely_tbl, x1, y1))
+  q2  <- as.matrix(select(dely_tbl, x2, y2))
+  
+  res1 <- nn2(ref, q1, k = 1)
+  res2 <- nn2(ref, q2, k = 1)
+  
+  p1 <- res1$nn.idx[, 1]
+  p2 <- res2$nn.idx[, 1]
+  
+  # optional: drop matches beyond a threshold
+  if (is.finite(max_dist)) {
+    p1[res1$nn.dists[, 1] > max_dist] <- NA_integer_
+    p2[res2$nn.dists[, 1] > max_dist] <- NA_integer_
+  }
+  
+  dely_tbl <- dely_tbl %>% mutate(p1 = p1, p2 = p2)
+  
+  # transfer minferet
+  d1 <- res1$nn.dists[, 1]
+  d2 <- res2$nn.dists[, 1]
+  dely_tbl <- dely_tbl %>%
+    mutate(p1 = p1,
+           p2 = p2,
+           # dist_p1 = d1,
+           # dist_p2 = d2,
+           feret_p1 = com_tbl$feret[p1],
+           feret_p2 = com_tbl$feret[p2])
+  
+  # calculate distance between points 
+  dely_tbl %>% 
+    mutate(cc_dist = sqrt((com_tbl$xm[p1] - com_tbl$xm[p2])^2 +
+                       (com_tbl$ym[p1] - com_tbl$ym[p2])^2)) %>% 
+    mutate(min_dist = cc_dist - feret_p1/2 - feret_p2/2)
+  
+}
+
+dat <- dat %>%
   mutate(
-    dist_p = sqrt( (com$xm[p1] - com$xm[p2])^2 +
-                     (com$ym[p1] - com$ym[p2])^2 )
+    dely = map2(dely, com, ~ add_pidx(.x, .y))
   )
+dat %>% pluck("dely", 1)
+
+
 ggplot(delaunay, aes(dist_p)) +
   geom_freqpoly(bins = 200)
 
 
-# transfer feret
-delaunay <- delaunay %>%
-  mutate(
-    feret_p1 = com$minferet[p1],
-    feret_p2 = com$minferet[p2]
-  )
 
 
 # inter-fiber distances ----
@@ -75,7 +132,6 @@ ggplot(d2, aes(min_dist)) +
 # be better solution for images with empty patches inside
 
 
-# just declare min_dist < 0 as 0, i.e. touching
 
 
 # fibril distribution ----
